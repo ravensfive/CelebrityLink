@@ -45,7 +45,7 @@ def on_intent(intent_request, session):
         return get_welcome_response()
     elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
         return handle_session_end_request()
-    elif intent_name == "AMAZON.FallbackIntent"
+    elif intent_name == "AMAZON.FallbackIntent":
         return fall_back_reponse()
     else:
         raise ValueError("Invalid intent")
@@ -72,9 +72,9 @@ def get_welcome_response():
     
     # set default value for numPoints
     card_title = "Welcome"
-    speech_output = "Welcome to Celebrity Link, are you ready to start or do you need the instructions"
+    speech_output = "Welcome to Celebrity Link, to hear the instructions just say, I need the instructions, if you are ready to play then say setup game followed by the players names"
     # you must say the name of a famous celebrity, the next player must then say the name of celebrity that's surname begins with the last letter of the previous celebrities, if you mention a celebrity whose first name starts with the same letter as the surname, then the order reverses"
-    reprompt_text = "Welcome to Celebrity Link, are you ready to start or do you need the instructions"
+    reprompt_text = "Welcome to Celebrity Link, to hear the instructions just say, I need the instructions, if you are ready to play then say setup game followed by the players names"
     should_end_session = False
     speech_output = "<speak>" + speech_output + "</speak>"
     card_output = cleanssml(speech_output)
@@ -100,7 +100,7 @@ def get_instructions():
     session_attributes = {}
     # set default value for numPoints
     card_title = "Welcome"
-    speech_output = "You must say the name of a famous celebrity, the next player must then say the name of celebrity that's surname begins with the last letter of the previous celebrities, if you mention a celebrity whose first name starts with the same letter as the surname, then the order reverses"
+    speech_output = "You must say the name of a famous celebrity, the next player must then say the name of a celebrity that's first name begins with the first letter of the previous celebrities surname, if you say a celebrity whose first name starts with the same letter as their surname, the order reverses"
     reprompt_text = "Welcome to Celebrity Link, are you ready to start or do you need the instructions"
     should_end_session = False
     speech_output = "<speak>" + speech_output + "</speak>"
@@ -119,11 +119,12 @@ def setup_players(intent):
     playerString = intent['slots']['players']['value'].split()
 
     for part in playerString:
-        # append player to json
-        addplayertoJson(len(playerdata['players'])+1,part,0,0,False,False,False,0,0)
-        speech_output = speech_output + " " + part.title()
+        if part.lower() != 'and':
+            # append player to json
+            addplayertoJson(len(playerdata['players'])+1,part,0,0,False,False,False,0,0)
+            speech_output = speech_output + " " + part.title()
     
-    speech_output = "I've added " + speech_output + ", just say start game to start, or you can still add more players"
+    speech_output = "I've added " + speech_output + ", you can add more by saying add followed by the players name, or to start say start game"
     card_title = "Players Added"
     reprompt_text = ""
     should_end_session = False
@@ -149,15 +150,22 @@ def play_turn(intent):
         if p['nextPlay'] == True:
                 playerselected = True
 
+    # if no players have been added then push back welcome message
+    print(len(playerdata['players']))
+    print(playerdata)
+
+    if len(playerdata['players']) == 0:
+        speech_output = "I cannot find any players loaded, say setup game followed by the players names"
+
     # if no start player has been selected yet then make the choice
-    if playerselected == False :
+    elif playerselected == False :
         # select random number between 1 and the maximum length of the json file
         selectedplayer = random.randint(1,len(playerdata['players'])) - 1
         
         # udpate player in json file
         playerdata['players'][selectedplayer]['nextPlay'] = True
 
-        speech_output = playerdata['players'][selectedplayer]['Name'] + " will start, " + playerdata['players'][selectedplayer]['Name'] + " when you are ready, say the name of your chosen celebrity"
+        speech_output = playerdata['players'][selectedplayer]['Name'] + " will start, " + generatebreakstring(500,"ms") + playerdata['players'][selectedplayer]['Name'] + " say the name of our first celebrity"
         
     # else play the turn
     else:
@@ -171,7 +179,7 @@ def play_turn(intent):
                 
                 # extract celebrity from slot
                 celebName = intent['slots']['celebrity']['value']
-
+                speech_output =  celebName.title() + generatebreakstring(500,"ms") + ", "
                 # set up for next player turn    
                 # set playing player ID - will be used to set the next player later in function
                 playingPlayerID = int(p['ID'])
@@ -192,6 +200,7 @@ def play_turn(intent):
                 else:
                      # load last celebrity criteria
                     lastCeleb = gamedata["names"][-1]['celebName']
+                    oldlnamestart = gamedata["names"][-1]['lnamestart']
                     oldFinalLetter = gamedata["names"][-1]['finalletter']
 
                     # add new celeb to json
@@ -206,8 +215,8 @@ def play_turn(intent):
                         newFinalLetter = gamedata["names"][-1]['finalletter']
 
                         # test last ending letter with new starting letter
-                        if oldFinalLetter == newStartingLetter:
-                            speech_output = "Correct "
+                        if oldlnamestart == newStartingLetter:
+                            # add jingle    
                             # test if starting letter of new celeb is also the starting letter of the surname, if so reverse order
                             if newStartingLetter == newLastLetter :
                                 # if current direction of players is asc then switch to descending
